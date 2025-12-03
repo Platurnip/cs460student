@@ -13,19 +13,33 @@
         overflow: hidden;
       }
     </style>
+
+    <script>
+      // Simple debug component: tells us in the console if the model loads or errors
+      AFRAME.registerComponent('debug-model-load', {
+        init: function () {
+          const el = this.el;
+          el.addEventListener('model-loaded', function () {
+            console.log('✅ cup2.glb model-loaded event fired');
+          });
+          el.addEventListener('model-error', function (e) {
+            console.error('❌ cup2.glb model-error event', e.detail);
+          });
+        }
+      });
+    </script>
   </head>
 
   <body>
     <a-scene embedded arjs="sourceType: webcam;">
 
-      <!-- Preload assets -->
+      <!-- Preload GLB -->
       <a-assets>
         <a-asset-item id="cupModel" src="cup2.glb"></a-asset-item>
       </a-assets>
 
-      <!-- Marker -->
       <a-marker preset="hiro">
-        <!-- DEBUG BOX: if you see this, AR + marker are working -->
+        <!-- DEBUG BOX: confirms marker + AR is working -->
         <a-box
           position="0 0.5 0"
           depth="0.5"
@@ -34,12 +48,13 @@
           color="red">
         </a-box>
 
-        <!-- Your TinkerCad cup model -->
+        <!-- CUP MODEL: now big and slightly raised -->
         <a-entity
           gltf-model="#cupModel"
-          position="0 0 0"
+          debug-model-load
+          position="0 0.5 0"
           rotation="0 0 0"
-          scale="0.1 0.1 0.1">
+          scale="1 1 1">
         </a-entity>
       </a-marker>
 
