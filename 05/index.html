@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <title>Assignment 5 - Part 3</title>
+
     <style>
       html, body {
         margin: 0;
@@ -12,13 +13,16 @@
         overflow: hidden;
         background-color: #000000;
       }
+
       canvas {
         display: block;
       }
     </style>
 
+    <!-- stats.js -->
     <script src="https://mrdoob.github.io/stats.js/build/stats.min.js"></script>
 
+    <!-- ES module shims + import map for three.js -->
     <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
     <script type="importmap">
       {
@@ -43,47 +47,61 @@
       let stats;
       let pane;
 
-      let qIdentity = new THREE.Quaternion(0, 0, 0, 1);
-      let q180 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+      // quaternions for 0° and 180° around Y
+      const qIdentity = new THREE.Quaternion(0, 0, 0, 1);
+      const q180 = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0),
+        Math.PI
+      );
 
+      // global state
       window.SCENE = {
         anaglyph: false,
         ambColor: { r: 1, g: 1, b: 1 },
-        poly: null,
+
+        polyRoot: null,
+        polyMesh: null,
         rotate_poly: false,
-        do_rotate_poly: function () {
+        do_rotate_poly() {
           window.SCENE.rotate_poly = !window.SCENE.rotate_poly;
         },
-        blender: null,
+
+        blenderRoot: null,
+        blenderMesh: null,
         rotate_blender: false,
-        do_rotate_blender: function () {
+        do_rotate_blender() {
           window.SCENE.rotate_blender = !window.SCENE.rotate_blender;
         },
+
         blender_helper: null,
         blender_old_material: null,
-        change_material: function () {
-          if (!window.SCENE.blender) return;
+        change_material() {
+          if (!window.SCENE.blenderMesh) return;
+          const mesh = window.SCENE.blenderMesh;
+
           if (!window.SCENE.blender_old_material) {
-            window.SCENE.blender_old_material = window.SCENE.blender.material.clone();
-            window.SCENE.blender.material = new THREE.MeshNormalMaterial();
+            window.SCENE.blender_old_material = mesh.material.clone();
+            mesh.material = new THREE.MeshNormalMaterial();
           } else {
-            window.SCENE.blender.material = window.SCENE.blender_old_material.clone();
+            mesh.material = window.SCENE.blender_old_material.clone();
             window.SCENE.blender_old_material = null;
           }
         }
       };
 
       window.onload = function () {
+        // Scene + camera
         scene = new THREE.Scene();
 
         camera = new THREE.PerspectiveCamera(
-          75,
+          60,
           window.innerWidth / window.innerHeight,
           0.1,
           10000
         );
         camera.position.set(0, 10, 40);
 
+        // Renderer + anaglyph
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -92,23 +110,29 @@
         effect = new AnaglyphEffect(renderer);
         effect.setSize(window.innerWidth, window.innerHeight);
 
+        // Lights
         light = new THREE.DirectionalLight(0xffffff, 2.0);
-        light.position.set(10, 30, 10);
+        light.position.set(20, 40, 20);
         scene.add(light);
 
         ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
         scene.add(ambientLight);
 
+        // Loader
         loader = new GLTFLoader();
 
-        loadPolyMesh();
-        loadBlenderMesh();
+        // Load the two models
+        loadPolyMesh();    // original PolyCam 12_1_2025.glb
+        loadBlenderMesh(); // cleaned cup.glb
 
+        // Controls
         controls = new OrbitControls(camera, renderer.domElement);
 
+        // Stats
         stats = new Stats();
-        document.body.appendChild(stats.domElement);
+        document.body.appendChild(stats.dom);
 
+        // UI
         pane = new Pane();
         setupUI();
 
@@ -124,56 +148,127 @@
         effect.setSize(window.innerWidth, window.innerHeight);
       }
 
+      // Normalize a model: center it at origin and scale to a target size
+      function normalizeAndCenter(root, targetSize = 10) {
+        const box = new THREE.Box3().setFromObject(root);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+
+        // Avoid divide-by-zero
+        const maxDim = Math.max(size.x, size.y, size.z) || 1;
+        const scale = targetSize / maxDim;
+
+        root.scale.setScalar(scale);
+
+        // After scaling, recenter again
+        const box2 = new THREE.Box3().setFromObject(root);
+        const center2 = new THREE.Vector3();
+        box2.getCenter(center2);
+        root.position.sub(center2); // moves model so its center is at (0,0,0)
+      }
+
+      function findFirstMesh(root) {
+        let found = null;
+        root.traverse((obj) => {
+          if (!found && obj.isMesh) {
+            found = obj;
+          }
+        });
+        return found;
+      }
+
       function setupUI() {
         const sceneui = pane.addFolder({ title: 'Scene' });
+
         sceneui.addBinding(window.SCENE, 'anaglyph', { label: 'Anaglyph' });
 
-        sceneui.addBinding(light.position, 'x', { min: -100, max: 100, label: 'Light X' });
-        sceneui.addBinding(light.position, 'y', { min: -100, max: 100, label: 'Light Y' });
-        sceneui.addBinding(light.position, 'z', { min: -100, max: 100, label: 'Light Z' });
-        sceneui.addBinding(light, 'intensity', { min: 0, max: 10, label: 'Light Intensity' });
+        sceneui.addBinding(light.position, 'x', {
+          min: -100,
+          max: 100,
+          label: 'Light X'
+        });
+        sceneui.addBinding(light.position, 'y', {
+          min: -100,
+          max: 100,
+          label: 'Light Y'
+        });
+        sceneui.addBinding(light.position, 'z', {
+          min: -100,
+          max: 100,
+          label: 'Light Z'
+        });
+        sceneui.addBinding(light, 'intensity', {
+          min: 0,
+          max: 10,
+          label: 'Light Intensity'
+        });
 
-        sceneui.addBinding(window.SCENE.ambColor, 'r', { min: 0, max: 1, label: 'Ambient R' });
-        sceneui.addBinding(window.SCENE.ambColor, 'g', { min: 0, max: 1, label: 'Ambient G' });
-        sceneui.addBinding(window.SCENE.ambColor, 'b', { min: 0, max: 1, label: 'Ambient B' });
+        sceneui.addBinding(window.SCENE.ambColor, 'r', {
+          min: 0,
+          max: 1,
+          label: 'Ambient R'
+        });
+        sceneui.addBinding(window.SCENE.ambColor, 'g', {
+          min: 0,
+          max: 1,
+          label: 'Ambient G'
+        });
+        sceneui.addBinding(window.SCENE.ambColor, 'b', {
+          min: 0,
+          max: 1,
+          label: 'Ambient B'
+        });
       }
 
       function loadPolyMesh() {
-        loader.load(
-          '12_1_2025.glb',
-          function (gltf) {
-            let poly = gltf.scene.children[0];
-            poly.scale.set(10, 10, 10);
-            poly.translateX(6);
-            scene.add(poly);
-            window.SCENE.poly = poly;
+        loader.load('12_1_2025.glb', (gltf) => {
+          const root = gltf.scene;
+          normalizeAndCenter(root, 10);
 
-            const polyui = pane.addFolder({ title: 'PolyCam Mesh' });
-            polyui.addBinding(poly.material, 'wireframe');
-            polyui.addButton({ title: 'Rotate 180°' }).on('click', () => {
-              window.SCENE.do_rotate_poly();
-            });
+          // move to the RIGHT
+          root.position.x = 8;
+
+          const mesh = findFirstMesh(root);
+          window.SCENE.polyRoot = root;
+          window.SCENE.polyMesh = mesh;
+
+          scene.add(root);
+
+          const polyui = pane.addFolder({ title: 'PolyCam Mesh' });
+          if (mesh && mesh.material) {
+            polyui.addBinding(mesh.material, 'wireframe', { label: 'Wireframe' });
           }
-        );
+          polyui.addButton({ title: 'Rotate 180°' }).on('click', () => {
+            window.SCENE.do_rotate_poly();
+          });
+        });
       }
 
       function loadBlenderMesh() {
-        loader.load(
-          'cup.glb',
-          function (gltf) {
-            let blender = gltf.scene.children[0];
-            blender.scale.set(10, 10, 10);
-            blender.translateX(-6);
-            scene.add(blender);
-            window.SCENE.blender = blender;
+        loader.load('cup.glb', (gltf) => {
+          const root = gltf.scene;
+          normalizeAndCenter(root, 10);
 
-            const helper = new VertexNormalsHelper(blender, 0.5, 'blue');
+          // move to the LEFT
+          root.position.x = -8;
+
+          const mesh = findFirstMesh(root);
+          window.SCENE.blenderRoot = root;
+          window.SCENE.blenderMesh = mesh;
+
+          scene.add(root);
+
+          // Vertex normals helper for the cleaned model
+          if (mesh) {
+            const helper = new VertexNormalsHelper(mesh, 0.5, 0x0000ff);
             helper.visible = false;
             scene.add(helper);
             window.SCENE.blender_helper = helper;
 
             const blenderui = pane.addFolder({ title: 'Blender Mesh' });
-            blenderui.addBinding(helper, 'visible');
+            blenderui.addBinding(helper, 'visible', { label: 'Show Normals' });
             blenderui.addButton({ title: 'Rotate 180°' }).on('click', () => {
               window.SCENE.do_rotate_blender();
             });
@@ -181,25 +276,35 @@
               window.SCENE.change_material();
             });
           }
-        );
+        });
       }
 
       function animate() {
         requestAnimationFrame(animate);
 
-        if (window.SCENE.poly) {
-          window.SCENE.poly.quaternion.slerp(
-            window.SCENE.rotate_poly ? q180 : qIdentity,
-            0.01
-          );
+        stats.begin();
+
+        // Update ambient color from UI
+        ambientLight.color.setRGB(
+          window.SCENE.ambColor.r,
+          window.SCENE.ambColor.g,
+          window.SCENE.ambColor.b
+        );
+
+        // Smoothly rotate poly model
+        if (window.SCENE.polyRoot) {
+          const target = window.SCENE.rotate_poly ? q180 : qIdentity;
+          window.SCENE.polyRoot.quaternion.slerp(target, 0.02);
         }
 
-        if (window.SCENE.blender) {
-          window.SCENE.blender.quaternion.slerp(
-            window.SCENE.rotate_blender ? q180 : qIdentity,
-            0.01
-          );
-          window.SCENE.blender_helper.update();
+        // Smoothly rotate blender model
+        if (window.SCENE.blenderRoot) {
+          const target = window.SCENE.rotate_blender ? q180 : qIdentity;
+          window.SCENE.blenderRoot.quaternion.slerp(target, 0.02);
+
+          if (window.SCENE.blender_helper) {
+            window.SCENE.blender_helper.update();
+          }
         }
 
         controls.update();
@@ -210,9 +315,10 @@
           renderer.render(scene, camera);
         }
 
-        stats.update();
+        stats.end();
       }
     </script>
   </head>
   <body></body>
 </html>
+
