@@ -46,29 +46,32 @@
 
       const qIdentity = new THREE.Quaternion(0, 0, 0, 1);
       const q180 = new THREE.Quaternion().setFromAxisAngle(
-        new THREE.Vector3(0, 1, 0),
-        Math.PI
+        new THREE.Vector3(0, 1, 0), Math.PI
       );
 
       window.SCENE = {
         anaglyph: false,
         ambColor: { r: 1, g: 1, b: 1 },
+
         polyRoot: null,
         rotate_poly: false,
-        blenderRoot: null,
-        rotate_blender: false,
-        blender_helper: null,
-        blenderMesh: null,
-        blender_old_material: null,
         do_rotate_poly() {
           window.SCENE.rotate_poly = !window.SCENE.rotate_poly;
         },
+
+        blenderRoot: null,
+        blenderMesh: null,
+        rotate_blender: false,
         do_rotate_blender() {
           window.SCENE.rotate_blender = !window.SCENE.rotate_blender;
         },
+
+        blender_helper: null,
+        blender_old_material: null,
         change_material() {
-          if (!window.SCENE.blenderMesh) return;
           const mesh = window.SCENE.blenderMesh;
+          if (!mesh) return;
+
           if (!window.SCENE.blender_old_material) {
             window.SCENE.blender_old_material = mesh.material.clone();
             mesh.material = new THREE.MeshNormalMaterial();
@@ -88,7 +91,7 @@
           0.1,
           1000
         );
-        camera.position.set(0, 5, 25);
+        camera.position.set(0, 10, 40);
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setPixelRatio(window.devicePixelRatio);
@@ -105,14 +108,6 @@
         ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
         scene.add(ambientLight);
 
-        const axes = new THREE.AxesHelper(5);
-        scene.add(axes);
-
-        const debugGeo = new THREE.BoxGeometry(1, 1, 1);
-        const debugMat = new THREE.MeshStandardMaterial({ color: 0xffff00 });
-        const debugCube = new THREE.Mesh(debugGeo, debugMat);
-        scene.add(debugCube);
-
         loader = new GLTFLoader();
 
         loadPolyMesh();
@@ -127,7 +122,6 @@
         setupUI();
 
         window.addEventListener('resize', onWindowResize);
-
         animate();
       };
 
@@ -138,15 +132,12 @@
         effect.setSize(window.innerWidth, window.innerHeight);
       }
 
-      function normalizeAndCenter(root, targetSize = 10) {
+      function normalizeAndCenter(root, targetSize = 15) {
         const box = new THREE.Box3().setFromObject(root);
         const size = new THREE.Vector3();
         box.getSize(size);
         const center = new THREE.Vector3();
         box.getCenter(center);
-
-        console.log('Model size:', size);
-        console.log('Model center before:', center);
 
         const maxDim = Math.max(size.x, size.y, size.z) || 1;
         const scale = targetSize / maxDim;
@@ -156,8 +147,6 @@
         const center2 = new THREE.Vector3();
         box2.getCenter(center2);
         root.position.sub(center2);
-
-        console.log('Model center after:', center2);
       }
 
       function findFirstMesh(root) {
@@ -170,102 +159,68 @@
 
       function setupUI() {
         const sceneui = pane.addFolder({ title: 'Scene' });
-
         sceneui.addBinding(window.SCENE, 'anaglyph', { label: 'Anaglyph' });
 
-        sceneui.addBinding(light.position, 'x', { min: -100, max: 100, label: 'Light X' });
-        sceneui.addBinding(light.position, 'y', { min: -100, max: 100, label: 'Light Y' });
-        sceneui.addBinding(light.position, 'z', { min: -100, max: 100, label: 'Light Z' });
-        sceneui.addBinding(light, 'intensity', { min: 0, max: 10, label: 'Light Intensity' });
+        sceneui.addBinding(light.position, 'x', { min: -100, max: 100 });
+        sceneui.addBinding(light.position, 'y', { min: -100, max: 100 });
+        sceneui.addBinding(light.position, 'z', { min: -100, max: 100 });
+        sceneui.addBinding(light, 'intensity', { min: 0, max: 10 });
 
-        sceneui.addBinding(window.SCENE.ambColor, 'r', { min: 0, max: 1, label: 'Ambient R' });
-        sceneui.addBinding(window.SCENE.ambColor, 'g', { min: 0, max: 1, label: 'Ambient G' });
-        sceneui.addBinding(window.SCENE.ambColor, 'b', { min: 0, max: 1, label: 'Ambient B' });
+        sceneui.addBinding(window.SCENE.ambColor, 'r', { min: 0, max: 1 });
+        sceneui.addBinding(window.SCENE.ambColor, 'g', { min: 0, max: 1 });
+        sceneui.addBinding(window.SCENE.ambColor, 'b', { min: 0, max: 1 });
       }
 
       function loadPolyMesh() {
-        console.log('Loading 12_1_2025.glb...');
-        loader.load(
-          '12_1_2025.glb',
-          (gltf) => {
-            console.log('12_1_2025.glb loaded');
-            const root = gltf.scene || gltf.scenes?.[0];
-            if (!root) {
-              console.error('No scene in 12_1_2025.glb');
-              return;
-            }
+        loader.load('12_1_2025.glb', (gltf) => {
+          const root = gltf.scene;
+          normalizeAndCenter(root, 15);
+          root.position.x = 8;
+          scene.add(root);
+          window.SCENE.polyRoot = root;
 
-            normalizeAndCenter(root, 10);
-            root.position.x = 8;
-
-            const mesh = findFirstMesh(root);
-            window.SCENE.polyRoot = root;
-
-            scene.add(root);
-
-            const polyui = pane.addFolder({ title: 'PolyCam Mesh' });
-            if (mesh && mesh.material) {
-              polyui.addBinding(mesh.material, 'wireframe', { label: 'Wireframe' });
-            }
-            polyui.addButton({ title: 'Rotate 180°' }).on('click', () => {
-              window.SCENE.do_rotate_poly();
-            });
-          },
-          undefined,
-          (err) => {
-            console.error('Error loading 12_1_2025.glb:', err);
+          const mesh = findFirstMesh(root);
+          const polyui = pane.addFolder({ title: 'PolyCam Mesh' });
+          if (mesh && mesh.material) {
+            polyui.addBinding(mesh.material, 'wireframe', { label: 'Wireframe' });
           }
-        );
+          polyui.addButton({ title: 'Rotate 180°' }).on('click', () => {
+            window.SCENE.do_rotate_poly();
+          });
+        });
       }
 
       function loadBlenderMesh() {
-        console.log('Loading cup.glb...');
-        loader.load(
-          'cup.glb',
-          (gltf) => {
-            console.log('cup.glb loaded');
-            const root = gltf.scene || gltf.scenes?.[0];
-            if (!root) {
-              console.error('No scene in cup.glb');
-              return;
-            }
+        loader.load('cup.glb', (gltf) => {
+          const root = gltf.scene;
+          normalizeAndCenter(root, 15);
+          root.position.x = -8;
+          scene.add(root);
+          window.SCENE.blenderRoot = root;
 
-            normalizeAndCenter(root, 10);
-            root.position.x = -8;
+          const mesh = findFirstMesh(root);
+          window.SCENE.blenderMesh = mesh;
 
-            const mesh = findFirstMesh(root);
-            window.SCENE.blenderRoot = root;
-            window.SCENE.blenderMesh = mesh;
+          if (mesh) {
+            const helper = new VertexNormalsHelper(mesh, 0.5);
+            helper.visible = false;
+            scene.add(helper);
+            window.SCENE.blender_helper = helper;
 
-            scene.add(root);
-
-            if (mesh) {
-              const helper = new VertexNormalsHelper(mesh, 0.5, 0x0000ff);
-              helper.visible = false;
-              scene.add(helper);
-              window.SCENE.blender_helper = helper;
-
-              const blenderui = pane.addFolder({ title: 'Blender Mesh' });
-              blenderui.addBinding(helper, 'visible', { label: 'Show Normals' });
-              blenderui.addButton({ title: 'Rotate 180°' }).on('click', () => {
-                window.SCENE.do_rotate_blender();
-              });
-              blenderui.addButton({ title: 'Change Material' }).on('click', () => {
-                window.SCENE.change_material();
-              });
-            }
-          },
-          undefined,
-          (err) => {
-            console.error('Error loading cup.glb:', err);
+            const blenderui = pane.addFolder({ title: 'Blender Mesh' });
+            blenderui.addBinding(helper, 'visible', { label: 'Show Normals' });
+            blenderui.addButton({ title: 'Rotate 180°' }).on('click', () => {
+              window.SCENE.do_rotate_blender();
+            });
+            blenderui.addButton({ title: 'Change Material' }).on('click', () => {
+              window.SCENE.change_material();
+            });
           }
-        );
+        });
       }
 
       function animate() {
         requestAnimationFrame(animate);
-
-        stats.begin();
 
         ambientLight.color.setRGB(
           window.SCENE.ambColor.r,
@@ -293,11 +248,10 @@
         } else {
           renderer.render(scene, camera);
         }
-
-        stats.end();
       }
     </script>
   </head>
   <body></body>
 </html>
+
 
