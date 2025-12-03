@@ -225,7 +225,7 @@
       function loadPolyMesh() {
         loader.load('12_1_2025.glb', (gltf) => {
           const root = gltf.scene;
-          normalizeAndCenter(root, 10);
+          normalizeAndCenter(root, 50);
 
           // move to the RIGHT
           root.position.x = 8;
@@ -249,7 +249,7 @@
       function loadBlenderMesh() {
         loader.load('cup.glb', (gltf) => {
           const root = gltf.scene;
-          normalizeAndCenter(root, 10);
+          normalizeAndCenter(root, 50);
 
           // move to the LEFT
           root.position.x = -8;
